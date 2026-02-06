@@ -3,7 +3,7 @@ load_dotenv()
 
 from typing import TypedDict, List
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
 
