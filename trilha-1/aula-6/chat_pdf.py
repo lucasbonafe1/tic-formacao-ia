@@ -10,7 +10,7 @@ template = "Você é um assistente de IA útil que ajuda os usuários a responde
 
 prompt = ChatPromptTemplate.from_template(template)
 
-llm = ChatCohere(temperature=0.5, model="command-a-03-2025")
+llm = ChatCohere(temperature=0.5, model="command-a-03-2025", streaming=True)
 
 qna_chain = prompt | llm
 
@@ -25,15 +25,13 @@ graph = StateGraph(State)
 def generate(state: State) -> State:
     docs_context = "\n".join(doc["page_content"] for doc in state["context"])
 
-    response = qna_chain.invoke({
+    response = qna_chain.stream({
         "context": docs_context,
         "question": state["question"],
         "answer": ""
     })
 
-    state["answer"] = response.content
-
-    return state
+    return {"answer": response}
 
 # Cria um nó do método e o chama
 graph.add_node("generate", generate)
