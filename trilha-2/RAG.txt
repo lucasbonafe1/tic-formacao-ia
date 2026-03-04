@@ -1,0 +1,19 @@
+RAG (Retrieval-Augmented Generation)
+
+O que é?
+- Uma técnica de IA que melhora a precisão dos modelos de linguagem (LLMs) conectando-os a fontes de dados externas e confiáveis, como documentos internos ou bancos de dados.
+
+Como funciona?
+- Ele funciona em quatro etapas: 
+	1) o usuário faz uma pergunta; 
+	2) o sistema busca documentos relevantes em um banco de dados vetorial; 
+	3) essa informação é adicionada ao prompt original; 
+	4) o LLM gera a resposta final baseada no contexto fornecido.
+
+Para que?
+- Para aumentar a precisão e a atualidade das respostas de Grandes Modelos de Linguagem (LLMs).
+
+BANCO VETORIAL
+
+- Diferente de bancos de dados tradicionais, eles permitem buscas de similaridade, agrupando itens relacionados, o que é crucial para IA generativa, RAG (Geração Aumentada por Recuperação) e motores de recomendação. Pois facilita a pesquisa pelos dados mais relevantes de acordo com a pergunta do prompt recebido.
+
