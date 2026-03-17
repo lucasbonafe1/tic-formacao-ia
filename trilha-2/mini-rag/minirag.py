@@ -81,7 +81,6 @@ graph.add_edge("augment_prompt", "display")
 graph.add_edge("display", END)
 
 app = graph.compile()
-
 # Executa pergunta de teste
 print("\nExecutando pergunta no grafo RAG...")
 app.invoke({"question": "Quando surgiu o termo Inteligência Artificial?", "context": [], "answer": ""})
