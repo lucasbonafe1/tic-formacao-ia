@@ -46,9 +46,22 @@ def search_node(state: AgentState): # realiza buscas online com base nas queries
     draft = state['draft'] or []
     for q in state['queries']:
         try:
-            response = tavily.search(query=q, max_results=3)
-            for r in response['results']:
-                draft.append(r['content'])
+            response = tavily.invoke({"query": q})
+            # Extrai conteúdo de texto da resposta
+            if isinstance(response, str):
+                draft.append(response)
+            elif isinstance(response, dict) and 'results' in response:
+                for r in response['results']:
+                    if isinstance(r, dict) and 'content' in r:
+                        draft.append(r['content'])
+                    elif isinstance(r, str):
+                        draft.append(r)
+            elif isinstance(response, list):
+                for item in response:
+                    if isinstance(item, str):
+                        draft.append(item)
+                    elif isinstance(item, dict) and 'content' in item:
+                        draft.append(item['content'])
         except Exception as e:
             print(f"Error searching for query '{q}': {e}")
             continue
