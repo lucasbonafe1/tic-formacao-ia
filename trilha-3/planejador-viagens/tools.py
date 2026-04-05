@@ -1,25 +1,43 @@
+from dotenv import load_dotenv
+load_dotenv()
+import os 
+import requests
 from langchain_core.tools import tool
 
-@tool
-def calcular_orcamento(destino: str, interesses: str) -> str:
+def busca_previsao_tempo(pais: str) -> str:
+    webhook_url = os.getenv("WEBHOOK-N8N")
+    payload = {
+        "pais": pais
+    }
+    try:
+        response = requests.post(webhook_url, json=payload)
+        return response.json()
+    except Exception as e:
+        return f"❌ Erro ao conectar com o serviço de previsão do tempo: {str(e)}"
+    
+@tool 
+def sugerir_bagagem_com_base_no_clima(pais: str) -> str:
     """
-    Calcula o orçamento aproximado de uma viagem baseado no destino e interesses.
+    Sugere o que empacotar na bagagem baseado no clima do país.
     
     Args:
-        destino: O nome do destino da viagem
-        interesses: Os interesses e preferências do viajante
+        pais: O nome do país
     
     Returns:
-        Uma estimativa de orçamento para a viagem
+        Sugestões de bagagem baseadas nas condições climáticas do país
     """
-    if "Japão" in destino:
-        base = 3000
-        if "surf" in interesses.lower():
-            base += 500
-        if "esportes radicais" in interesses.lower():
-            base += 700
-        if "cerveja" in interesses.lower():
-            base += 300
-        return f"💰 Orçamento aproximado para uma viagem ao {destino}: R$ {base:.2f}\n- Incluindo hospedagem, transporte local e atividades conforme seus interesses (surf, esportes radicais, bares de cerveja)"
-    else:
-        return f"⚠️  Orçamento não disponível para o destino '{destino}'. Por favor, tente outro destino ou forneça mais informações."
+    response = busca_previsao_tempo(pais)
+    if not isinstance(response, dict) or 'main' not in response:
+        return f"Não foi possível obter a previsão do tempo para {pais}."
+    
+    forecast = response['main']
+    suggestions = []
+    if forecast.get('temp_max') > 25:
+        suggestions.append("Roupas leves, protetor solar e óculos de sol")
+    if forecast.get('temp_min') < 20:
+        suggestions.append("Roupas quentes e agasalhos")
+    if forecast.get('humidity') > 100:
+        suggestions.append("Guarda-chuva ou capa de chuva")
+    if response['wind'].get('speed', 0) > 2:
+        suggestions.append("Jaqueta corta-vento")
+    return f"Sugestões de bagagem para {pais}: {', '.join(suggestions)}"

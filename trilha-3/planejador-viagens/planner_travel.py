@@ -12,9 +12,9 @@ from IPython.display import Image, display
 from typing import TypedDict, Any
 from prompts_const import QUERY_MAKER_PROMPT, RESULT_PROMPT, REVISION_PROMPT
 from langchain_cohere import ChatCohere
-from tools import calcular_orcamento
+from tools import sugerir_bagagem_com_base_no_clima
 
-tools = [calcular_orcamento]
+tools = [sugerir_bagagem_com_base_no_clima]
 model = ChatCohere(model="command-a-03-2025", temperature=0).bind_tools(tools)
 tavily = TavilySearchResults(max_results=3, tavily_api_key=os.getenv("TAVILY_SEARCH_API"))
 tool_node = ToolNode(tools)
@@ -241,7 +241,7 @@ def run_travel_planner():
     thread = {"configurable": {"thread_id": "1"}}
     
     initial_state = {
-        'task': "Gostaria de viajar para o Japão, gosto de surfar, fazer esportes radicais e adoro cerveja. Me passe o orçamento aproximado para essa viagem e me faça um planejamento de viagem personalizado com base nesses interesses.",
+        'task': "Gostaria de viajar para o Brasil, gosto de surfar, fazer esportes radicais e adoro cerveja. Me passe o orçamento aproximado para essa viagem, me faça um planejamento de viagem personalizado com base nesses interesses e me de ideias do que levar na mala.",
         'draft': [],
         'queries': [],
         'result': "",
