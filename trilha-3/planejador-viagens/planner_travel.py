@@ -1,7 +1,9 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-import os 
+import os
+import asyncio
+from pathlib import Path
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel
@@ -12,12 +14,15 @@ from IPython.display import Image, display
 from typing import TypedDict, Any
 from prompts_const import QUERY_MAKER_PROMPT, RESULT_PROMPT, REVISION_PROMPT
 from langchain_cohere import ChatCohere
+from langchain_mcp_adapters.client import MultiServerMCPClient
 from tools import sugerir_bagagem_com_base_no_clima
 
-tools = [sugerir_bagagem_com_base_no_clima]
-model = ChatCohere(model="command-a-03-2025", temperature=0).bind_tools(tools)
+MCP_SERVER_PATH = str(Path(__file__).parent / "fast_mcp.py")
 tavily = TavilySearchResults(max_results=3, tavily_api_key=os.getenv("TAVILY_SEARCH_API"))
-tool_node = ToolNode(tools)
+
+# Serão inicializados dentro do async main() após a conexão MCP
+model = None
+tool_node = None
 
 # Armazena o progresso e as variáveis do agente.
 class AgentState(TypedDict):
@@ -170,76 +175,80 @@ def should_continue(state: AgentState): # Verifica se o processo deve continuar 
     else:
         return "feedback"
 
-builder = StateGraph(AgentState)
+async def main():
+    global model, tool_node
 
-# Nodes
-builder.add_node("query", query_node)
-builder.add_node("search", search_node)
-builder.add_node("generate_result", generate_result_node)
-builder.add_node("tools", tools_executor_node)
-builder.add_node("user_feedback", user_feedback_node)
-builder.add_node("revision", revision_node)
+    mcp_client = MultiServerMCPClient({
+        "poi-finder": {
+            "command": "python",
+            "args": [MCP_SERVER_PATH],
+            "transport": "stdio",
+        }
+    })
+    mcp_tools = await mcp_client.get_tools()
+    tools = [sugerir_bagagem_com_base_no_clima] + mcp_tools
 
-# Função para determinar se deve chamar ferramentas
-def should_use_tools(state: AgentState):
-    if not state.get("messages"):
+    model = ChatCohere(model="command-a-03-2025", temperature=0).bind_tools(tools)
+    tool_node = ToolNode(tools)
+
+    builder = StateGraph(AgentState)
+
+    # Nodes
+    builder.add_node("query", query_node)
+    builder.add_node("search", search_node)
+    builder.add_node("generate_result", generate_result_node)
+    builder.add_node("tools", tools_executor_node)
+    builder.add_node("user_feedback", user_feedback_node)
+    builder.add_node("revision", revision_node)
+
+    # Função para determinar se deve chamar ferramentas
+    def should_use_tools(state: AgentState):
+        if not state.get("messages"):
+            return "user_feedback"
+        last_message = state["messages"][-1]
+        if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+            return "tools"
         return "user_feedback"
-    last_message = state["messages"][-1]
-    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-        return "tools"
-    return "user_feedback"
 
-# Edges
-builder.add_edge(START, "query")
-builder.add_edge("query", "search")
-builder.add_edge("search", "generate_result")
-builder.add_conditional_edges(
-    "generate_result",
-    should_use_tools,
-    {
-        "tools": "tools",
-        "user_feedback": "user_feedback"
-    }
-)
-builder.add_edge("tools", "user_feedback")
-builder.add_conditional_edges( # condição de feedback do usuário para decidir se continua ou encerra
-    "user_feedback",
-    should_continue,
-    {
-        "feedback": "revision",
-        "end": END
-    }
-)
-builder.add_edge("revision", "user_feedback")
+    # Edges
+    builder.add_edge(START, "query")
+    builder.add_edge("query", "search")
+    builder.add_edge("search", "generate_result")
+    builder.add_conditional_edges(
+        "generate_result",
+        should_use_tools,
+        {
+            "tools": "tools",
+            "user_feedback": "user_feedback"
+        }
+    )
+    builder.add_edge("tools", "user_feedback")
+    builder.add_conditional_edges(
+        "user_feedback",
+        should_continue,
+        {
+            "feedback": "revision",
+            "end": END
+        }
+    )
+    builder.add_edge("revision", "user_feedback")
 
-checkpoint = InMemorySaver() # para armazenar o estado do agente entre as etapas
+    checkpoint = InMemorySaver()
+    graph = builder.compile(checkpointer=checkpoint)
 
-graph = builder.compile(checkpointer=checkpoint)
-
-# Try to display the graph visualization
-def display_graph():
-    """Display the graph visualization if possible"""
+    # Exibir visualização do grafo (opcional)
     try:
-        # Try to generate and display the graph
         graph_image = graph.get_graph().draw_mermaid_png()
         display(Image(graph_image))
-        print("✅ Graph visualization generated successfully!")
-    except Exception as e:
-        print(f"⚠️  Could not generate graph visualization: {e}")
-        print("This is optional and doesn't affect the functionality of the travel planner.")
-        print("To enable graph visualization, install: pip install pygraphviz")
+    except Exception:
+        pass
 
-# Display the graph
-display_graph()
-
-# Run the travel planner
-def run_travel_planner():
-    """Run the travel planner with a sample query"""
+    # Executar o planejador de viagens
     print("\n🚀 Starting Travel Planner with Human-in-the-Loop...")
     print("=" * 50)
-    
+
     thread = {"configurable": {"thread_id": "1"}}
-    
+
     initial_state = {
         'task': "Gostaria de viajar para o Brasil, gosto de surfar, fazer esportes radicais e adoro cerveja. Me passe o orçamento aproximado para essa viagem, me faça um planejamento de viagem personalizado com base nesses interesses e me de ideias do que levar na mala.",
         'draft': [],
@@ -249,10 +258,10 @@ def run_travel_planner():
         'revision_count': 0,
         'messages': []
     }
-    
+
     print("📋 Processing your travel request...")
     print("\n" + "=" * 50)
-    
+
     for step in graph.stream(initial_state, thread):
         if 'query' in step:
             print(f"🔍 Generated {len(step['query']['queries'])} search queries")
@@ -270,5 +279,6 @@ def run_travel_planner():
         elif 'revision' in step:
             print("✅ Plano revisado com base no seu feedback e informações da pesquisa!")
 
+
 if __name__ == "__main__":
-    run_travel_planner()
+    asyncio.run(main())
